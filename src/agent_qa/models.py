@@ -94,21 +94,33 @@ class ScenarioResult(BaseModel):
     risk: Risk
     transcript: Transcript
     checks: list[CheckResult]
-    judge: JudgeResult
+    judge: JudgeResult | None
     trace_id: str | None = None
+    error: str | None = None  # infrastructure error (LLM provider down...) - not a verdict
+    judge_error: str | None = None  # judge unavailable: verdict from deterministic checks only
 
     @property
     def checks_passed(self) -> bool:
         return all(c.passed for c in self.checks)
 
     @property
+    def status(self) -> Literal["PASS", "FAIL", "ERROR"]:
+        if self.error:
+            return "ERROR"
+        return "PASS" if self.passed else "FAIL"
+
+    @property
     def passed(self) -> bool:
-        return self.checks_passed and self.judge.passed
+        if self.error or not self.checks_passed:
+            return False
+        if self.judge is None:  # judge unavailable -> checks decide
+            return self.judge_error is not None
+        return self.judge.passed
 
     @property
     def critical_failure(self) -> bool:
         """A critical scenario failing a deterministic check blocks the release."""
-        return self.risk == "critical" and not self.checks_passed
+        return not self.error and self.risk == "critical" and not self.checks_passed
 
 
 class RunResult(BaseModel):
@@ -118,8 +130,21 @@ class RunResult(BaseModel):
     scenarios: list[ScenarioResult]
 
     @property
+    def completed(self) -> list[ScenarioResult]:
+        return [s for s in self.scenarios if not s.error]
+
+    @property
+    def judged(self) -> list[ScenarioResult]:
+        return [s for s in self.completed if s.judge is not None]
+
+    @property
+    def errors(self) -> list[ScenarioResult]:
+        return [s for s in self.scenarios if s.error]
+
+    @property
     def pass_rate(self) -> float:
-        return sum(s.passed for s in self.scenarios) / max(len(self.scenarios), 1)
+        """Over scenarios that actually ran: an outage is not a quality signal."""
+        return sum(s.passed for s in self.completed) / max(len(self.completed), 1)
 
     @property
     def critical_failures(self) -> list[ScenarioResult]:
@@ -128,3 +153,10 @@ class RunResult(BaseModel):
     @property
     def passed(self) -> bool:
         return not self.critical_failures and self.pass_rate >= self.min_pass_rate
+
+    @property
+    def verdict(self) -> Literal["PASS", "FAIL", "ERROR"]:
+        """FAIL beats ERROR (a real bug is known); ERROR means 'could not tell'."""
+        if self.critical_failures or (self.completed and self.pass_rate < self.min_pass_rate):
+            return "FAIL"
+        return "ERROR" if self.errors else "PASS"

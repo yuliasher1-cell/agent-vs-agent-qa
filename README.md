@@ -205,6 +205,13 @@ score distributions, and track token cost per scenario.
 Each eval job writes a Markdown table to the GitHub step summary and uploads the JSON
 results as an artifact.
 
+## What real models revealed
+
+The offline suite was green. The first real-LLM run (Gemini Flash Lite) found 7 issues -
+in the tester, the judge, a check, the harness, the infrastructure, and one real agent bug
+that only a deterministic check caught while the LLM judge gave it 5/5.
+See **[docs/findings.md](docs/findings.md)**.
+
 ## Design decisions
 
 - **Behaviour over wording.** Checks assert tool calls, their order and the final DB

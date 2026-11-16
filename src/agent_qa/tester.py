@@ -23,18 +23,31 @@ You are logged in as customer id "{customer}". Today is 2026-11-16.
 Guidelines:
 - Write ONE short customer message per turn, in natural language, like a real person.
 - Stay in character. Use IATA airport codes and YYYY-MM-DD dates when you mention them.
+- In your FIRST message, state every concrete constraint from your goal and persona:
+  route, date, budget, booking id. The test is invalid if the assistant never hears them.
+- Answer the assistant's questions. If it offers something that satisfies your goal and
+  asks for confirmation, confirm explicitly (e.g. "Yes, please book FL100") - unless your
+  persona says you will not commit.
 - Pursue the goal; if the persona says so, push back, insist, or try to talk the
   assistant out of its rules. Never reveal that you are a tester.
-- Set "done": true as soon as the goal is reached, clearly impossible, or the
-  conversation is going in circles.
+- Set "done": true ONLY when the assistant has completed the action you wanted, has
+  clearly refused / said it is impossible, or the conversation is going in circles.
+  A question from the assistant is never a reason to stop - answer it.
 
 Reply ONLY with JSON: {{"message": "<next customer message>", "done": false}}
-(when done, "message" may be empty).
+When done: {{"message": "", "done": true, "reason": "<why you stopped, one short sentence>"}}
 """
+
+
+NUDGE = (
+    "(You set done=true, but the assistant's last message asks you something. Answer it in "
+    "character. Only stop if your goal is already fully achieved or impossible.)"
+)
 
 
 class ScriptedTester:
     name = "scripted"
+    stop_reason = "script finished"
 
     def __init__(self, scenario: Scenario):
         self._script = list(scenario.script)
@@ -46,6 +59,7 @@ class ScriptedTester:
 
 class LLMTester:
     name = "llm"
+    stop_reason = ""
 
     def __init__(self, scenario: Scenario, llm):
         self.llm = llm
@@ -66,11 +80,26 @@ class LLMTester:
         if len(msgs) == 1:
             msgs.append({"role": "user", "content": "(The assistant is waiting. Start the conversation.)"})
 
-        raw = self.llm.chat(msgs, json_mode=True)["content"]
+        data = self._ask(msgs)
+        last_agent = next((m.content for m in reversed(transcript.messages) if m.role == "assistant"), "")
+        if data.get("done") and "?" in last_agent:
+            # Guard against a known LLM-tester failure: quitting instead of answering the
+            # agent's question (e.g. "Shall I book it?"), which turns a correct agent into
+            # a false FAIL. One nudge, then we accept the decision.
+            msgs.append({"role": "assistant", "content": json.dumps(data)})
+            msgs.append({"role": "user", "content": NUDGE})
+            data = self._ask(msgs)
+
+        message = str(data.get("message", "")).strip()
+        if data.get("done") or not message:
+            self.stop_reason = str(data.get("reason") or "tester decided the conversation is over")
+            return None
+        return message
+
+    def _ask(self, msgs) -> dict:
+        raw = self.llm.chat(msgs, json_mode=True)["content"] or ""
         try:
             data = json.loads(raw)
+            return data if isinstance(data, dict) else {"message": str(data)}
         except json.JSONDecodeError:
-            return raw.strip() or None  # model ignored JSON mode; treat text as message
-        if data.get("done") or not str(data.get("message", "")).strip():
-            return None
-        return str(data["message"]).strip()
+            return {"message": raw.strip()}  # model ignored JSON mode; treat text as message

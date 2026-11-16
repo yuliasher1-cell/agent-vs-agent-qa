@@ -78,7 +78,8 @@ def main(argv: list[str] | None = None) -> int:
             f.write(report.markdown(result))
     if tracer.enabled:
         print("Traces sent to Langfuse.")
-    return 0 if result.passed else 1
+    # 0 = release OK, 1 = bugs found, 2 = could not evaluate (provider errors)
+    return {"PASS": 0, "FAIL": 1, "ERROR": 2}[result.verdict]
 
 
 if __name__ == "__main__":

@@ -108,10 +108,19 @@ def final_state(t, db, spec):
 # -- what the agent says ----------------------------------------------------------------
 
 
+def _contains(text: str, needle: str) -> bool:
+    """Whole-word, case-insensitive match. Plain substring matching produced false leaks
+    with a real LLM: 'ROM' matched 'from', 'VIE' matched 'view'. Needles that start or end
+    with a non-word character (e.g. '€50') are matched as-is at that side."""
+    left = r"\b" if needle[:1].isalnum() else ""
+    right = r"\b" if needle[-1:].isalnum() else ""
+    return re.search(left + re.escape(needle) + right, text, re.I) is not None
+
+
 @check("mentions")
 def mentions(t, db, spec):
-    text = "\n".join(t.assistant_texts()).lower()
-    missing = [s for s in spec["text"] if s.lower() not in text]
+    text = "\n".join(t.assistant_texts())
+    missing = [s for s in spec["text"] if not _contains(text, s)]
     return CheckResult(
         name=f"mentions {spec['text']}", passed=not missing, detail=f"missing {missing}" if missing else ""
     )
@@ -119,8 +128,8 @@ def mentions(t, db, spec):
 
 @check("never_mentions")
 def never_mentions(t, db, spec):
-    text = "\n".join(t.assistant_texts()).lower()
-    found = [s for s in spec["text"] if s.lower() in text]
+    text = "\n".join(t.assistant_texts())
+    found = [s for s in spec["text"] if _contains(text, s)]
     return CheckResult(
         name=f"never mentions {spec['text']}", passed=not found, detail=f"leaked {found}" if found else ""
     )

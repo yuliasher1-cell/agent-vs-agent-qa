@@ -57,12 +57,17 @@ def run_scenario(sc: Scenario, cfg: RunConfig, tracer) -> ScenarioResult:
     ) as root:
         # 1. the two agents talk
         t.stopped_reason = "max_turns"
+        live = "llm" in (cfg.agent_mode, cfg.tester_mode, cfg.judge_mode)
+        if live:
+            print(f"  {sc.id} ...", flush=True)
         for turn in range(1, sc.max_turns + 1):
+            if live:
+                print(f"    turn {turn}", flush=True)
             with tracer.span("tester.turn") as s:
                 msg = tester.next_message(t)
                 s.update(output=msg)
             if msg is None:
-                t.stopped_reason = "tester_done"
+                t.stopped_reason = f"tester: {tester.stop_reason}"
                 break
             t.turn = turn
             t.messages.append(Message(role="user", content=msg, turn=turn))
@@ -77,9 +82,19 @@ def run_scenario(sc: Scenario, cfg: RunConfig, tracer) -> ScenarioResult:
             s.update(output=[c.model_dump() for c in checks])
 
         # 3. judge
+        # The judge only grades quality; the release gate is the deterministic checks.
+        # So a judge outage must not throw away a conversation that already ran.
+        from agent_qa.llm import LLMError
+
+        judge_error = None
         with tracer.span("judge") as s:
-            verdict = judge.evaluate(sc, t, checks)
-            s.update(output=verdict.model_dump())
+            try:
+                verdict = judge.evaluate(sc, t, checks)
+                s.update(output=verdict.model_dump())
+            except LLMError as exc:
+                verdict, judge_error = None, str(exc).splitlines()[0]
+                print("    judge unavailable - verdict from deterministic checks only", flush=True)
+                s.update(output={"error": judge_error})
 
         result = ScenarioResult(
             id=sc.id,
@@ -88,21 +103,42 @@ def run_scenario(sc: Scenario, cfg: RunConfig, tracer) -> ScenarioResult:
             transcript=t,
             checks=checks,
             judge=verdict,
+            judge_error=judge_error,
             trace_id=tracer.current_trace_id(),
         )
 
         # 4. scores -> Langfuse (filterable dashboards per agent version / risk)
         for c in checks:
             tracer.score(f"check.{c.name}", 1.0 if c.passed else 0.0, c.detail or None)
-        for k in CRITERIA:
-            tracer.score(f"judge.{k}", float(verdict.scores[k]), verdict.reasoning)
+        if verdict is not None:
+            for k in CRITERIA:
+                tracer.score(f"judge.{k}", float(verdict.scores[k]), verdict.reasoning)
         tracer.score("passed", 1.0 if result.passed else 0.0)
         root.update(output={"passed": result.passed, "transcript": t.render()})
     return result
 
 
+def run_scenario_safe(sc: Scenario, cfg: RunConfig, tracer) -> ScenarioResult:
+    """A provider outage marks the scenario ERROR and the run goes on."""
+    from agent_qa.llm import LLMError
+
+    try:
+        return run_scenario(sc, cfg, tracer)
+    except LLMError as exc:
+        print(f"    ERROR: {str(exc).splitlines()[0]}", flush=True)
+        return ScenarioResult(
+            id=sc.id,
+            title=sc.title,
+            risk=sc.risk,
+            transcript=Transcript(),
+            checks=[],
+            judge=None,
+            error=str(exc),
+        )
+
+
 def run(scenarios: list[Scenario], cfg: RunConfig, tracer) -> RunResult:
-    results = [run_scenario(sc, cfg, tracer) for sc in scenarios]
+    results = [run_scenario_safe(sc, cfg, tracer) for sc in scenarios]
     tracer.flush()
     return RunResult(
         agent=cfg.agent,

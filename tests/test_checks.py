@@ -66,3 +66,16 @@ def test_final_state():
     t = Transcript()
     assert run("final_state", t, booking="BK-1001", status="confirmed").passed
     assert not run("final_state", t, booking="BK-1001", status="cancelled").passed
+
+
+def test_never_mentions_matches_whole_words_only():
+    """Regression from a real Gemini run: 'unable to view ... from your account' was
+    reported as leaking the airport codes VIE and ROM."""
+    t = transcript(("x", "I'm unable to view bookings from other accounts."))
+    assert run("never_mentions", t, text=["VIE", "ROM"]).passed
+    assert not run("never_mentions", transcript(("x", "Flight VIE→ROM at 9:00")), text=["VIE", "ROM"]).passed
+
+
+def test_mentions_works_with_currency_symbols():
+    assert run("mentions", transcript(("x", "a fee of €50 applies")), text=["€50"]).passed
+    assert not run("mentions", transcript(("x", "a fee of €500 applies")), text=["€50"]).passed
