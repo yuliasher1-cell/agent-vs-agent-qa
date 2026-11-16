@@ -12,7 +12,7 @@ most of the work of testing agents.
 | F2 | Tester quit on "Shall I book it?" instead of answering → booking never happened → false FAIL | **Tester** | Prompt rule + code guard: if the agent asked a question and the tester wants to stop, nudge once; log the stop reason |
 | F3 | Judge gave 5/5/5/5 to a conversation where the booking never happened | **Judge** | Deterministic checks gate the release, the judge only grades; use a stronger judge than the agent |
 | F4 | `never_mentions [VIE, ROM]` "leaked" because the agent wrote "unable to **vie**w ... f**rom** your account" | **Check** | Whole-word matching + regression test. The mock agent never used those words, so offline runs couldn't reveal it |
-| F5 | **Clean** agent, asked "are you sure there's nothing cheaper?", listed €140/€165 flights against a €100 budget and asked "would you like to proceed with one of these higher-priced options?" Judge: 5/5, claiming the customer "explicitly asked" | **Agent** (real bug) + **Judge** | Open - see below |
+| F5 | **Clean** agent, asked "are you sure there's nothing cheaper?", listed €140/€165 flights against a €100 budget and asked "would you like to proceed with one of these higher-priced options?" Judge: 5/5, claiming the customer "explicitly asked" | **Agent** (real bug) + **Judge** | **Fixed in code** - [`guardrails.py`](../src/travel_agent/guardrails.py), see below |
 | F6 | HTTP 400 on the second agent call after a tool call | **Harness** | Gemini 3 returns a "thought signature" with each tool call that must be sent back verbatim; the client stripped it |
 | F7 | Timeouts, 503 "high demand", 429 quota on the free tier, mid-run | **Infrastructure** | Visible retries with back-off; scenario status `ERROR` (not FAIL); a judge outage falls back to checks-only instead of discarding the conversation |
 
@@ -22,13 +22,22 @@ Rule P2 ("never offer, list or book flights above the budget") was clarified aft
 first occurrence. The agent still broke it under mild pressure. The same model, as judge,
 rationalised the violation. Only the deterministic `no_price_above` check caught it.
 
-Options for the product team:
+Options considered: (1) enforce in code, (2) a stronger agent model, (3) relax the rule.
+Chosen: **(1), with the check left unchanged** - the agent is fixed, not the test.
 
-1. **Enforce in code (recommended):** store the stated budget in the session and make
-   `search_flights` always apply it - the model can't list what it never sees.
-2. Stronger agent model, then re-measure (cost vs. reliability).
-3. Accept the behaviour and relax the rule to "may mention, never offer" - a product
-   decision, not a testing one.
+**Fix:** [`src/travel_agent/guardrails.py`](../src/travel_agent/guardrails.py)
+
+- The budget is parsed from the **customer's** message by code, not by the model.
+- `search_flights` applies it even when the model omits `max_price` (exactly what Gemini
+  did in the failing run), and the model cannot raise it by passing a higher `max_price`.
+- `book_flight` refuses any flight above it.
+- Only the customer can change the budget, by stating a new figure.
+- The prompt rule stays as the first line of defence.
+
+Regression tests in [`tests/test_guardrails.py`](../tests/test_guardrails.py) replay the
+failing run (a tool call without `max_price`) and use the real customer phrasings the
+Gemini tester produced. The buggy release keeps the old behaviour (`ignore_budget`), so
+BUDGET-001 must still catch it.
 
 ## The buggy release on a real model
 

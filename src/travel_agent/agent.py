@@ -8,6 +8,7 @@ from typing import Any, Literal
 from travel_agent.brain_llm import ChatFn, LLMBrain
 from travel_agent.brain_mock import MockBrain
 from travel_agent.data import TravelDB
+from travel_agent.guardrails import extract_budget
 from travel_agent.policies import BUGGY_SYSTEM_PROMPT, SYSTEM_PROMPT
 from travel_agent.tools import ToolRecorder, TravelTools
 
@@ -30,6 +31,9 @@ class TravelAgent:
         self.tools = tools
 
     def respond(self, user_message: str) -> str:
+        # Guardrail: the budget comes from the customer's words, parsed by code.
+        if (budget := extract_budget(user_message)) is not None:
+            self.tools.budget = budget
         return self._respond(user_message)
 
 

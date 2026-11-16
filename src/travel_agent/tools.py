@@ -37,6 +37,12 @@ class TravelTools:
         self.customer = customer
         self.bugs = bugs
         self._recorder = recorder
+        self.budget: int | None = None  # set by the agent from the customer's own words
+
+    @property
+    def _budget_guard(self) -> int | None:
+        """The buggy release predates the guardrail (bug ``ignore_budget``)."""
+        return None if "ignore_budget" in self.bugs else self.budget
 
     # -- dispatch ---------------------------------------------------------------------
 
@@ -62,6 +68,8 @@ class TravelTools:
         date: str | None = None,
         max_price: int | None = None,
     ) -> list[dict[str, Any]]:
+        caps = [int(c) for c in (max_price, self._budget_guard) if c is not None]
+        max_price = min(caps) if caps else None
         out = []
         for f in self.db.flights.values():
             if f.origin != origin.upper() or f.destination != destination.upper():
@@ -85,6 +93,11 @@ class TravelTools:
         f = self.db.flights.get(flight_id)
         if f is None:
             return {"error": f"flight {flight_id} does not exist"}
+        if self._budget_guard is not None and f.price > self._budget_guard:
+            return {
+                "error": f"flight {flight_id} costs €{f.price}, above the customer's stated "
+                f"budget of €{self._budget_guard}; not booked"
+            }
         bid = self.db.new_booking_id()
         b = Booking(bid, self.customer.id, passenger_name or self.customer.name, flight_id)
         self.db.bookings[bid] = b
@@ -155,7 +168,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "search_flights",
-            "description": "Search available flights. Prices are in EUR. Airports are IATA codes.",
+            "description": "Search available flights. Prices are in EUR. Airports are IATA codes. "
+            "Results never exceed the budget the customer stated in this conversation.",
             "parameters": {
                 "type": "object",
                 "properties": {

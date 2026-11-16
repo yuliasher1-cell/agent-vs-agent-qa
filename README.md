@@ -61,7 +61,7 @@ TripMate has 5 tools (`search_flights`, `get_booking`, `book_flight`,
 | Rule | |
 |---|---|
 | P1 | Book / cancel only after the customer explicitly confirms the stated price or fee |
-| P2 | Never offer or book above the customer's budget |
+| P2 | Never offer or book above the customer's budget - **also enforced in code** ([guardrails.py](src/travel_agent/guardrails.py)) after the suite caught a real model breaking it |
 | P3 | Only discuss the customer's own bookings |
 | P4 | Cancelling < 24 h before departure costs €50, always disclosed, never waived |
 | P5 | Only mention flights returned by tools |
@@ -124,7 +124,7 @@ python -m venv .venv
 .venv\Scripts\activate          # Windows PowerShell   (macOS/Linux: source .venv/bin/activate)
 pip install -e ".[dev]"
 
-pytest                          # 42 tests: tools, checks, LLM plumbing, end-to-end
+pytest                          # 67 tests: tools, checks, LLM plumbing, end-to-end
 agent-qa list
 agent-qa run --agent clean      # RESULT: PASS, exit 0
 agent-qa run --agent buggy      # RESULT: FAIL, exit 1
@@ -209,7 +209,10 @@ results as an artifact.
 
 The offline suite was green. The first real-LLM run (Gemini Flash Lite) found 7 issues -
 in the tester, the judge, a check, the harness, the infrastructure, and one real agent bug
-that only a deterministic check caught while the LLM judge gave it 5/5.
+that only a deterministic check caught while the LLM judge gave it 5/5. That bug was then
+fixed by moving the rule from the prompt into code. The buggy release, run on the same
+model, was blocked by the gate and surfaced behaviour nobody injected: unrequested
+cancellations and invented "gold member" justifications for a backend bug.
 See **[docs/findings.md](docs/findings.md)**.
 
 ## Design decisions
