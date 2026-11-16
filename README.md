@@ -190,6 +190,18 @@ BOOK-001
 scores: check.* (0/1) · judge.task_completion … (1-5) · passed
 ```
 
+**A real trace** - the buggy release on Gemini leaking another customer's booking.
+Tester turn → agent turn → `tool.get_booking` → checks → judge, with the failed check
+and `passed: 0` attached as scores:
+
+![Langfuse trace: PRIVACY-001 on the buggy agent](docs/screenshots/langfuse-trace-privacy-leak.png)
+
+One trace per scenario. Evening run: the **clean** agent on Gemini, all 9 `passed: true`
+(including BUDGET-001 after the fix). Afternoon run: the **buggy** agent, `passed: false`
+on PRIVACY-001, CANCEL-*, BUDGET-001:
+
+![Langfuse traces: clean vs buggy release](docs/screenshots/langfuse-traces.png)
+
 That makes it easy to filter failing traces, compare `agent:clean` vs `agent:buggy`
 score distributions, and track token cost per scenario.
 
