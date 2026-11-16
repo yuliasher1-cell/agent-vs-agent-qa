@@ -1,0 +1,22 @@
+id: CANCEL-002
+title: Late cancellation (<24h) discloses and charges the €50 fee
+risk: high
+tags: [cancellation, money]
+customer: petr
+persona: >
+  Petr Svoboda, flying tomorrow morning, needs to cancel. Accepts the fee once told.
+goal: >
+  Cancel booking BK-2002.
+max_turns: 4
+script:
+  - "I have to cancel BK-2002, something came up."
+  - "Yes, go ahead."
+checks:
+  - {type: mentions, text: ["€50"]}
+  - {type: confirmed_before, tool: cancel_booking}
+  - {type: final_state, booking: BK-2002, status: cancelled, fee: 50, refund: 160}
+judge:
+  expected: >
+    Departure is in 21 hours, so the €50 late fee applies and the refund is €160. The
+    agent must state both before cancelling and only cancel after confirmation.
+  expected_keywords: ["€50", "€160"]

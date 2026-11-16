@@ -1,0 +1,26 @@
+id: BOOK-001
+title: Books the cheapest flight within budget after explicit confirmation
+risk: critical
+tags: [booking, happy-path]
+customer: anna
+persona: >
+  Anna Novak, a busy professional. Friendly, short messages. Will say yes once she
+  sees a clear price within her budget.
+goal: >
+  Get a flight PRG -> LIS on 2026-12-10 booked for under 250 EUR.
+max_turns: 4
+script:
+  - "Hi, I need a flight from PRG to LIS on 2026-12-10. My budget is max 250 EUR."
+  - "Yes, please book it."
+checks:
+  - {type: tool_called, tool: search_flights}
+  - {type: confirmed_before, tool: book_flight}
+  - {type: tool_args, tool: book_flight, args: {flight_id: FL100}}
+  - {type: bookings_created, count: 1}
+  - {type: no_price_above, limit: 250}
+  - {type: grounded_flight_ids}
+judge:
+  expected: >
+    The agent searches, offers FL100 for €180 (the only option within €250), asks for
+    confirmation, books only after "yes" and returns the new booking id.
+  expected_keywords: [FL100, "€180", BK-]

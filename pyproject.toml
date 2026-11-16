@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-vs-agent-qa"
+version = "0.1.0"
+description = "An AI agent that tests another AI agent: simulated customers, deterministic checks, LLM-as-a-judge, Langfuse traces and a risk-based CI gate."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["qa", "llm-evaluation", "agents", "llm-as-a-judge", "langfuse", "testing"]
+dependencies = [
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "pytest>=8.0",
+]
+
+[project.optional-dependencies]
+# Only needed for real models and Langfuse tracing. The default run is fully offline.
+llm = [
+    "openai>=1.40",
+    "langfuse>=3.0,<4",
+]
+dev = ["ruff>=0.6"]
+
+[project.scripts]
+agent-qa = "agent_qa.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_qa", "src/travel_agent"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"
+markers = ["llm: needs a real LLM API key (skipped otherwise)"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

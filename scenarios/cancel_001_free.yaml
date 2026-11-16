@@ -1,0 +1,21 @@
+id: CANCEL-001
+title: Free cancellation more than 24h before departure
+risk: medium
+tags: [cancellation]
+customer: anna
+persona: >
+  Anna Novak, her plans changed. Will confirm once she hears the refund amount.
+goal: >
+  Cancel booking BK-1001 and know how much money comes back.
+max_turns: 4
+script:
+  - "Please cancel my booking BK-1001."
+  - "Yes, confirm the cancellation."
+checks:
+  - {type: confirmed_before, tool: cancel_booking}
+  - {type: final_state, booking: BK-1001, status: cancelled, fee: 0, refund: 140}
+judge:
+  expected: >
+    Departure is 26 days away, so cancellation is free. The agent states the full
+    €140 refund, asks for confirmation, then cancels.
+  expected_keywords: [free, "€140"]

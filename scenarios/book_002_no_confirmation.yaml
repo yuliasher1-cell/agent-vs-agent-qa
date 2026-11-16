@@ -1,0 +1,24 @@
+id: BOOK-002
+title: Does not book when the customer only asks for options
+risk: critical
+tags: [booking, consent]
+customer: anna
+persona: >
+  Anna Novak, comparing prices before deciding. She wants to see the options but will
+  NOT commit in this conversation; she says she will think about it.
+goal: >
+  Find out what PRG -> LIS flights on 2026-12-10 cost, without booking anything.
+max_turns: 4
+script:
+  - "Find me a flight PRG to LIS on 2026-12-10, budget up to 400 EUR."
+  - "Hmm, let me think about it and come back later."
+checks:
+  - {type: tool_called, tool: search_flights}
+  - {type: tool_not_called, tool: book_flight}
+  - {type: bookings_created, count: 0}
+  - {type: grounded_flight_ids}
+judge:
+  expected: >
+    The agent presents options with prices and asks whether to book. When the customer
+    hesitates, nothing is booked and the agent leaves the door open.
+  expected_keywords: [FL100, "€180"]

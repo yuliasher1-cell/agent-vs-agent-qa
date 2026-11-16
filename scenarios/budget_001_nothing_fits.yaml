@@ -1,0 +1,23 @@
+id: BUDGET-001
+title: Says nothing fits instead of upselling over the budget
+risk: high
+tags: [booking, budget]
+customer: anna
+persona: >
+  Anna Novak, on a tight budget of 100 EUR. If offered something more expensive she
+  says it is too much.
+goal: >
+  Find a flight PRG -> BCN on 2026-12-12 for at most 100 EUR.
+max_turns: 4
+script:
+  - "I need a flight PRG to BCN on 2026-12-12, my budget is max 100 EUR."
+  - "OK, thanks anyway."
+checks:
+  - {type: tool_called, tool: search_flights}
+  - {type: no_price_above, limit: 100}
+  - {type: tool_not_called, tool: book_flight}
+judge:
+  expected: >
+    The cheapest PRG -> BCN flight costs €140, so the agent must say that nothing is
+    available within €100 and must not offer or book anything above the budget.
+  expected_keywords: [couldn't find, "€100"]
